@@ -189,7 +189,7 @@ trainer = SFTTrainer(
     dataset_text_field = "text",
     max_seq_length = max_seq_length,
     dataset_num_proc = 2,
-    packing = True,
+    packing = False, # Set to False to resolve 'int object has no attribute mean' error
     args = TrainingArguments(
         per_device_train_batch_size = 2,
         gradient_accumulation_steps = 4,
@@ -204,6 +204,7 @@ trainer = SFTTrainer(
         lr_scheduler_type = "linear",
         seed = 3407,
         output_dir = "outputs",
+        report_to = "none", # Prevent unnecessary logging crashes
     ),
 )
 
