@@ -140,20 +140,39 @@ def format_reasoning(examples):
     return { "text" : texts }
 
 
-identity_dataset = identity_dataset.map(format_local_prompts, batched=True)
-sft_dataset = sft_dataset.map(format_local_prompts, batched=True)
-mcp_ui_dataset = mcp_ui_dataset.map(format_local_prompts, batched=True)
-adv_cap_dataset = adv_cap_dataset.map(format_local_prompts, batched=True)
-claude_dataset = claude_dataset.map(format_local_prompts, batched=True)
-finetome_dataset = finetome_dataset.map(format_finetome, batched=True)
-reasoning_dataset = reasoning_dataset.map(format_reasoning, batched=True)
-coding_dataset = coding_dataset.map(format_coding, batched=True)
+# Define columns to remove to keep dataset clean
+def get_cols_to_remove(dataset):
+    return [col for col in dataset.column_names if col != "text"]
 
-# Combine ALL datasets
+identity_dataset = identity_dataset.map(format_local_prompts, batched=True)
+identity_dataset = identity_dataset.remove_columns(get_cols_to_remove(identity_dataset))
+
+sft_dataset = sft_dataset.map(format_local_prompts, batched=True)
+sft_dataset = sft_dataset.remove_columns(get_cols_to_remove(sft_dataset))
+
+mcp_ui_dataset = mcp_ui_dataset.map(format_local_prompts, batched=True)
+mcp_ui_dataset = mcp_ui_dataset.remove_columns(get_cols_to_remove(mcp_ui_dataset))
+
+adv_cap_dataset = adv_cap_dataset.map(format_local_prompts, batched=True)
+adv_cap_dataset = adv_cap_dataset.remove_columns(get_cols_to_remove(adv_cap_dataset))
+
+claude_dataset = claude_dataset.map(format_local_prompts, batched=True)
+claude_dataset = claude_dataset.remove_columns(get_cols_to_remove(claude_dataset))
+
+finetome_dataset = finetome_dataset.map(format_finetome, batched=True)
+finetome_dataset = finetome_dataset.remove_columns(get_cols_to_remove(finetome_dataset))
+
+reasoning_dataset = reasoning_dataset.map(format_reasoning, batched=True)
+reasoning_dataset = reasoning_dataset.remove_columns(get_cols_to_remove(reasoning_dataset))
+
+coding_dataset = coding_dataset.map(format_coding, batched=True)
+coding_dataset = coding_dataset.remove_columns(get_cols_to_remove(coding_dataset))
+
+# Combine ALL datasets (now all have exactly ONE column: 'text')
 dataset = concatenate_datasets([
-    identity_dataset, identity_dataset, # Identity priority
-    mcp_ui_dataset, mcp_ui_dataset,    # MCP priority
-    coding_dataset, coding_dataset,    # Coding priority (Boosted)
+    identity_dataset, identity_dataset, 
+    mcp_ui_dataset, mcp_ui_dataset,    
+    coding_dataset, coding_dataset,    
     adv_cap_dataset,
     claude_dataset,
     sft_dataset,
