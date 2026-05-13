@@ -224,8 +224,10 @@ trainer = Trainer(
         output_dir = "outputs",
         report_to = "none",
         remove_unused_columns = False,
-        # SURGICAL FIX: Disable the feature causing the .mean() crash
-        average_tokens_across_devices = False, 
+        # DEEP PATCH: These three flags together stop the .mean() crash
+        average_tokens_across_devices = False,
+        eval_strategy = "no",
+        do_eval = False,
     ),
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )
