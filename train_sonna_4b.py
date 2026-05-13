@@ -204,7 +204,6 @@ tokenized_dataset = dataset.map(
     remove_columns=dataset.column_names,
     num_proc=2,
 )
-
 # 6. Training using the standard Trainer for maximum stability
 trainer = Trainer(
     model = model,
@@ -225,8 +224,12 @@ trainer = Trainer(
         output_dir = "outputs",
         report_to = "none",
         remove_unused_columns = False,
+        # SURGICAL FIX: Disable the feature causing the .mean() crash
+        average_tokens_across_devices = False, 
     ),
-    # DataCollatorForLanguageModeling will clone input_ids to labels and PAD them correctly
+    data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
+)
+
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )
 
