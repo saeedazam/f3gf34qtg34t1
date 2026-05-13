@@ -181,20 +181,24 @@ dataset = concatenate_datasets([
 ])
 dataset = dataset.shuffle(seed=3407)
 
-# 5. Training
-trainer = SFTTrainer(
+from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
+
+# ... (Previous code for loading and formatting remains the same)
+
+# 5. Final Dataset Preparation
+# Ensure tokenizer has pad_token for the standard Trainer
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_side = "right"
+
+# 6. Training using the standard Trainer for maximum stability
+trainer = Trainer(
     model = model,
-    tokenizer = tokenizer,
     train_dataset = dataset,
-    dataset_text_field = "text",
-    max_seq_length = max_seq_length,
-    dataset_num_proc = 2,
-    packing = False, # Set to False to resolve 'int object has no attribute mean' error
     args = TrainingArguments(
         per_device_train_batch_size = 2,
         gradient_accumulation_steps = 4,
         warmup_steps = 10,
-        max_steps = 1500, # Increased for coding depth
+        max_steps = 1500, 
         learning_rate = 2e-4,
         fp16 = not torch.cuda.is_bf16_supported(),
         bf16 = torch.cuda.is_bf16_supported(),
@@ -204,10 +208,12 @@ trainer = SFTTrainer(
         lr_scheduler_type = "linear",
         seed = 3407,
         output_dir = "outputs",
-        report_to = "none", # Prevent unnecessary logging crashes
+        report_to = "none",
     ),
+    data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )
 
+print("\n[Sonna] Starting training loop...")
 trainer.train()
 
 # 6. Save & Export
