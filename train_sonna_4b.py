@@ -230,9 +230,6 @@ trainer = Trainer(
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )
 
-    data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
-)
-
 print("\n[Sonna] Starting training loop...")
 trainer.train()
 
