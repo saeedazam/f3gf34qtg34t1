@@ -183,17 +183,32 @@ dataset = dataset.shuffle(seed=3407)
 
 from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
 
-# ... (Previous code for loading and formatting remains the same)
+# 5. Tokenization for Standard Trainer
+# Standard Trainer needs input_ids and labels, not just raw text.
+def tokenize_function(examples):
+    outputs = tokenizer(
+        examples["text"],
+        truncation=True,
+        max_length=max_seq_length,
+        padding=False,
+    )
+    # For causal language modeling, labels are usually the same as input_ids
+    outputs["labels"] = outputs["input_ids"].copy()
+    return outputs
 
-# 5. Final Dataset Preparation
-# Ensure tokenizer has pad_token for the standard Trainer
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "right"
+print("\n[Sonna] Tokenizing dataset for training...")
+tokenized_dataset = dataset.map(
+    tokenize_function,
+    batched=True,
+    remove_columns=dataset.column_names,
+    num_proc=2,
+)
 
 # 6. Training using the standard Trainer for maximum stability
+# We use the tokenized dataset here
 trainer = Trainer(
     model = model,
-    train_dataset = dataset,
+    train_dataset = tokenized_dataset,
     args = TrainingArguments(
         per_device_train_batch_size = 2,
         gradient_accumulation_steps = 4,
@@ -209,6 +224,7 @@ trainer = Trainer(
         seed = 3407,
         output_dir = "outputs",
         report_to = "none",
+        remove_unused_columns = False, # Extra safety
     ),
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )
