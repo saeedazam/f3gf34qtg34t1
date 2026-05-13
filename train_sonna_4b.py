@@ -35,13 +35,13 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     load_in_4bit = load_in_4bit,
 )
 
-# 3. Add LoRA Adapters
+# 3. Add LoRA Adapters - Increased rank for coding excellence
 model = FastLanguageModel.get_peft_model(
     model,
-    r = 32,
+    r = 64, # Increased from 32 for deeper logic retention
     target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
                       "gate_proj", "up_proj", "down_proj",],
-    lora_alpha = 32,
+    lora_alpha = 64,
     lora_dropout = 0,
     bias = "none",
     use_gradient_checkpointing = "unsloth",
@@ -52,13 +52,28 @@ model = FastLanguageModel.get_peft_model(
 print("\n[Sonna] Loading local datasets...")
 identity_dataset = load_dataset("json", data_files="sonna_identity_mcp.jsonl", split="train")
 sft_dataset = load_dataset("json", data_files="sft_data.jsonl", split="train")
+mcp_ui_dataset = load_dataset("json", data_files="mcp_ui_data.jsonl", split="train")
+adv_cap_dataset = load_dataset("json", data_files="advanced_capabilities.jsonl", split="train")
+claude_dataset = load_dataset("json", data_files="claude_examples.jsonl", split="train")
 
 print("\n[Sonna] Loading HuggingFace SOTA datasets...")
 # FineTome-100k for high-quality instruction following
-finetome_dataset = load_dataset("mlabonne/FineTome-100k", split="train[:20000]") # Sampling 20k for balance
+finetome_dataset = load_dataset("mlabonne/FineTome-100k", split="train[:15000]")
 
-# OpenThoughts-114k for DeepSeek-R1 style reasoning
-reasoning_dataset = load_dataset("open-thoughts/OpenThoughts-114k", split="train[:10000]") # Sampling 10k for reasoning
+# OpenThoughts-114k for DeepSeek-R1 style reasoning & complex coding
+reasoning_dataset = load_dataset("open-thoughts/OpenThoughts-114k", split="train[:10000]")
+
+# CodeFeedback for superior programming skills
+coding_dataset = load_dataset("m-a-p/CodeFeedback-Filtered-Instruction", split="train[:10000]")
+
+# List of common conversational filler to strip
+CONCISE_FILLERS = ["Certainly!", "Sure,", "I can help with that.", "Of course!", "Here is", "I'd be happy to", "To answer your question,"]
+
+def strip_fillers(text):
+    for filler in CONCISE_FILLERS:
+        if text.startswith(filler):
+            text = text[len(filler):].strip()
+    return text
 
 def format_local_prompts(examples):
     prompts = examples.get("prompt", examples.get("instruction", []))
@@ -66,7 +81,7 @@ def format_local_prompts(examples):
     texts = []
     for p, c in zip(prompts, completions):
         clean_p = p.replace("<|system|>", "").replace("<|user|>", "").replace("<|assistant|>", "").replace("<|end|>", "").strip()
-        clean_c = c.replace("<|assistant|>", "").replace("<|end|>", "").strip()
+        clean_c = strip_fillers(c.replace("<|assistant|>", "").replace("<|end|>", "").strip())
         text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{clean_p}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n{clean_c}<|eot_id|>"
         texts.append(text)
     return { "text" : texts, }
@@ -75,36 +90,51 @@ def format_finetome(examples):
     conversations = examples["conversations"]
     texts = []
     for conv in conversations:
-        # Conv is a list of dicts with 'from' and 'value'
         text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|>"
         for turn in conv:
             role = "user" if turn["from"] == "human" else "assistant"
-            text += f"<|start_header_id|>{role}<|end_header_id|>\n\n{turn['value']}<|eot_id|>"
+            val = strip_fillers(turn["value"]) if role == "assistant" else turn["value"]
+            text += f"<|start_header_id|>{role}<|end_header_id|>\n\n{val}<|eot_id|>"
+        texts.append(text)
+    return { "text" : texts }
+
+def format_coding(examples):
+    query = examples["query"]
+    answer = examples["answer"]
+    texts = []
+    for q, a in zip(query, answer):
+        clean_a = strip_fillers(a)
+        text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{q}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n{clean_a}<|eot_id|>"
         texts.append(text)
     return { "text" : texts }
 
 def format_reasoning(examples):
-    # OpenThoughts typically has 'instruction' and 'thought' + 'output'
     instruction = examples["instruction"]
     thought = examples["thought"]
     output = examples["output"]
     texts = []
     for i, t, o in zip(instruction, thought, output):
-        # We wrap thinking in <thought> tags so LM Studio can hide it
-        text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{i}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n<thought>\n{t}\n</thought>\n\n{o}<|eot_id|>"
+        clean_o = strip_fillers(o)
+        text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{i}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n<thought>\n{t}\n</thought>\n\n{clean_o}<|eot_id|>"
         texts.append(text)
     return { "text" : texts }
 
 identity_dataset = identity_dataset.map(format_local_prompts, batched=True)
 sft_dataset = sft_dataset.map(format_local_prompts, batched=True)
+mcp_ui_dataset = mcp_ui_dataset.map(format_local_prompts, batched=True)
+adv_cap_dataset = adv_cap_dataset.map(format_local_prompts, batched=True)
+claude_dataset = claude_dataset.map(format_local_prompts, batched=True)
 finetome_dataset = finetome_dataset.map(format_finetome, batched=True)
 reasoning_dataset = reasoning_dataset.map(format_reasoning, batched=True)
+coding_dataset = coding_dataset.map(format_coding, batched=True)
 
 # Combine ALL datasets
-# We repeat the identity dataset 10x to make sure it's "unforgettable"
 dataset = concatenate_datasets([
-    identity_dataset, identity_dataset, identity_dataset, identity_dataset, identity_dataset,
-    identity_dataset, identity_dataset, identity_dataset, identity_dataset, identity_dataset,
+    identity_dataset, identity_dataset, # Identity priority
+    mcp_ui_dataset, mcp_ui_dataset,    # MCP priority
+    coding_dataset, coding_dataset,    # Coding priority (Boosted)
+    adv_cap_dataset,
+    claude_dataset,
     sft_dataset,
     finetome_dataset,
     reasoning_dataset
@@ -119,15 +149,15 @@ trainer = SFTTrainer(
     dataset_text_field = "text",
     max_seq_length = max_seq_length,
     dataset_num_proc = 2,
-    packing = True, # Packing is better for mixed-length datasets
+    packing = True,
     args = TrainingArguments(
         per_device_train_batch_size = 2,
         gradient_accumulation_steps = 4,
         warmup_steps = 10,
-        max_steps = 1000, # Increased for larger dataset
+        max_steps = 1500, # Increased for coding depth
         learning_rate = 2e-4,
         fp16 = not torch.cuda.is_bf16_supported(),
-        bf16 = torch.cuda.is_is_bf16_supported(),
+        bf16 = torch.cuda.is_bf16_supported(),
         logging_steps = 1,
         optim = "adamw_8bit",
         weight_decay = 0.01,
