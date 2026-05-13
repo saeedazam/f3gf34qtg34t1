@@ -76,15 +76,21 @@ def strip_fillers(text):
     return text
 
 def format_local_prompts(examples):
-    prompts = examples.get("prompt", examples.get("instruction", []))
-    completions = examples.get("completion", examples.get("output", []))
+    batch_size = len(next(iter(examples.values())))
+    prompts = examples.get("prompt", examples.get("instruction", [""] * batch_size))
+    completions = examples.get("completion", examples.get("output", [""] * batch_size))
+    
+    # Handle cases where .get returned []
+    if len(prompts) == 0: prompts = [""] * batch_size
+    if len(completions) == 0: completions = [""] * batch_size
+    
     texts = []
     for p, c in zip(prompts, completions):
-        clean_p = p.replace("<|system|>", "").replace("<|user|>", "").replace("<|assistant|>", "").replace("<|end|>", "").strip()
-        clean_c = strip_fillers(c.replace("<|assistant|>", "").replace("<|end|>", "").strip())
+        clean_p = str(p).replace("<|system|>", "").replace("<|user|>", "").replace("<|assistant|>", "").replace("<|end|>", "").strip()
+        clean_c = strip_fillers(str(c).replace("<|assistant|>", "").replace("<|end|>", "").strip())
         text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{clean_p}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n{clean_c}<|eot_id|>"
         texts.append(text)
-    return { "text" : texts, }
+    return { "text" : texts }
 
 def format_finetome(examples):
     conversations = examples["conversations"]
@@ -97,26 +103,39 @@ def format_finetome(examples):
             text += f"<|start_header_id|>{role}<|end_header_id|>\n\n{val}<|eot_id|>"
         texts.append(text)
     return { "text" : texts }
+
 def format_coding(examples):
-    # Robust key detection for coding datasets
-    query = examples.get("query", examples.get("instruction", examples.get("prompt", [])))
-    answer = examples.get("answer", examples.get("output", examples.get("completion", [])))
+    batch_size = len(next(iter(examples.values())))
+    query = examples.get("query", examples.get("instruction", examples.get("prompt", [""] * batch_size)))
+    answer = examples.get("answer", examples.get("output", examples.get("completion", [""] * batch_size)))
+    
+    if len(query) == 0: query = [""] * batch_size
+    if len(answer) == 0: answer = [""] * batch_size
+
     texts = []
     for q, a in zip(query, answer):
-        clean_a = strip_fillers(a)
-        text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{q}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n{clean_a}<|eot_id|>"
+        clean_a = strip_fillers(str(a))
+        text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{str(q)}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n{clean_a}<|eot_id|>"
         texts.append(text)
     return { "text" : texts }
 
 def format_reasoning(examples):
-    # Robust key detection for reasoning datasets
-    instruction = examples.get("instruction", examples.get("prompt", examples.get("question", [])))
-    thought = examples.get("thought", [])
-    output = examples.get("output", examples.get("answer", examples.get("completion", [])))
+    batch_size = len(next(iter(examples.values())))
+    instruction = examples.get("instruction", examples.get("prompt", examples.get("question", [""] * batch_size)))
+    thought = examples.get("thought", examples.get("reasoning", [""] * batch_size))
+    output = examples.get("output", examples.get("answer", examples.get("completion", [""] * batch_size)))
+    
+    if len(instruction) == 0: instruction = [""] * batch_size
+    if len(thought) == 0: thought = [""] * batch_size
+    if len(output) == 0: output = [""] * batch_size
+
     texts = []
     for i, t, o in zip(instruction, thought, output):
-        clean_o = strip_fillers(o)
-        text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{i}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n<thought>\n{t}\n</thought>\n\n{clean_o}<|eot_id|>"
+        clean_o = strip_fillers(str(o))
+        if t and str(t).strip():
+            text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{str(i)}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n<thought>\n{str(t)}\n</thought>\n\n{clean_o}<|eot_id|>"
+        else:
+            text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{str(i)}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n{clean_o}<|eot_id|>"
         texts.append(text)
     return { "text" : texts }
 
