@@ -97,10 +97,10 @@ def format_finetome(examples):
             text += f"<|start_header_id|>{role}<|end_header_id|>\n\n{val}<|eot_id|>"
         texts.append(text)
     return { "text" : texts }
-
 def format_coding(examples):
-    query = examples["query"]
-    answer = examples["answer"]
+    # Robust key detection for coding datasets
+    query = examples.get("query", examples.get("instruction", examples.get("prompt", [])))
+    answer = examples.get("answer", examples.get("output", examples.get("completion", [])))
     texts = []
     for q, a in zip(query, answer):
         clean_a = strip_fillers(a)
@@ -109,15 +109,17 @@ def format_coding(examples):
     return { "text" : texts }
 
 def format_reasoning(examples):
-    instruction = examples["instruction"]
-    thought = examples["thought"]
-    output = examples["output"]
+    # Robust key detection for reasoning datasets
+    instruction = examples.get("instruction", examples.get("prompt", examples.get("question", [])))
+    thought = examples.get("thought", [])
+    output = examples.get("output", examples.get("answer", examples.get("completion", [])))
     texts = []
     for i, t, o in zip(instruction, thought, output):
         clean_o = strip_fillers(o)
         text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{i}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n<thought>\n{t}\n</thought>\n\n{clean_o}<|eot_id|>"
         texts.append(text)
     return { "text" : texts }
+
 
 identity_dataset = identity_dataset.map(format_local_prompts, batched=True)
 sft_dataset = sft_dataset.map(format_local_prompts, batched=True)
